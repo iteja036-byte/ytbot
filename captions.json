@@ -1,0 +1,199 @@
+{
+  "sad": [
+    {
+      "text": "they left and took the warmth with them 🥀",
+      "emotion": "heartbreak",
+      "intensity": 9.5
+    },
+    {
+      "text": "missing someone who doesn't miss you back hurts different 💔",
+      "emotion": "missing-you",
+      "intensity": 8.8
+    },
+    {
+      "text": "some goodbyes last forever",
+      "emotion": "sad-love",
+      "intensity": 8.2
+    },
+    {
+      "text": "the silence after them is the loudest thing 🌧️",
+      "emotion": "heartbreak",
+      "intensity": 9.1
+    },
+    {
+      "text": "i still check my phone hoping it's you",
+      "emotion": "missing-you",
+      "intensity": 8.5
+    },
+    {
+      "text": "loving someone who's already gone 💔",
+      "emotion": "sad-love",
+      "intensity": 8.9
+    },
+    {
+      "text": "the version of me that loved you doesn't exist anymore",
+      "emotion": "heartbreak",
+      "intensity": 9.3
+    },
+    {
+      "text": "some wounds only get quieter, they never really heal",
+      "emotion": "sad-love",
+      "intensity": 8.6
+    }
+  ],
+  "hype": [
+    {
+      "text": "no cap this is going crazy 🔥",
+      "emotion": "hype",
+      "intensity": 9.3
+    },
+    {
+      "text": "the wait is over. era begins NOW 👑",
+      "emotion": "hype",
+      "intensity": 9.6
+    },
+    {
+      "text": "this scene STILL lives rent free 💀",
+      "emotion": "hype",
+      "intensity": 8.9
+    },
+    {
+      "text": "bro said what we were all thinking 💀",
+      "emotion": "hype",
+      "intensity": 8.7
+    },
+    {
+      "text": "peak fiction. no notes.",
+      "emotion": "hype",
+      "intensity": 9.4
+    },
+    {
+      "text": "the internet cannot handle this scene 🔥",
+      "emotion": "hype",
+      "intensity": 9.1
+    },
+    {
+      "text": "they really said let him cook and he COOKED 🍳",
+      "emotion": "hype",
+      "intensity": 9.2
+    }
+  ],
+  "motivation": [
+    {
+      "text": "you're not tired. you're close. keep going 🏆",
+      "emotion": "motivation",
+      "intensity": 9.4
+    },
+    {
+      "text": "the version of you they doubted is loading ⚡",
+      "emotion": "motivation",
+      "intensity": 9.7
+    },
+    {
+      "text": "rest if you must. but never quit.",
+      "emotion": "motivation",
+      "intensity": 8.6
+    },
+    {
+      "text": "main character energy. always.",
+      "emotion": "motivation",
+      "intensity": 8.3
+    },
+    {
+      "text": "you were built for this moment 🔥",
+      "emotion": "motivation",
+      "intensity": 9.0
+    },
+    {
+      "text": "they slept on you. stay quiet. let the results talk.",
+      "emotion": "motivation",
+      "intensity": 9.5
+    },
+    {
+      "text": "every day you keep going is a flex 💪",
+      "emotion": "motivation",
+      "intensity": 8.8
+    }
+  ],
+  "nostalgia": [
+    {
+      "text": "we didn't know those were the good days 🌅",
+      "emotion": "nostalgia",
+      "intensity": 9.0
+    },
+    {
+      "text": "some songs teleport you straight back ✨",
+      "emotion": "nostalgia",
+      "intensity": 8.4
+    },
+    {
+      "text": "the feeling of that era never left",
+      "emotion": "nostalgia",
+      "intensity": 8.7
+    },
+    {
+      "text": "growing up felt different back then 🌙",
+      "emotion": "nostalgia",
+      "intensity": 8.5
+    },
+    {
+      "text": "some memories hit different at 2am",
+      "emotion": "nostalgia",
+      "intensity": 8.9
+    }
+  ],
+  "rage": [
+    {
+      "text": "nah they really did that 😤",
+      "emotion": "rage",
+      "intensity": 9.2
+    },
+    {
+      "text": "at this point it's personal",
+      "emotion": "rage",
+      "intensity": 8.9
+    },
+    {
+      "text": "some disrespect cannot go unanswered 😤",
+      "emotion": "rage",
+      "intensity": 9.5
+    },
+    {
+      "text": "the audacity is actually insane",
+      "emotion": "rage",
+      "intensity": 9.0
+    },
+    {
+      "text": "they crossed the line and knew exactly what they were doing",
+      "emotion": "rage",
+      "intensity": 9.3
+    }
+  ],
+  "joy": [
+    {
+      "text": "this is the serotonin we deserve 😭✨",
+      "emotion": "joy",
+      "intensity": 8.8
+    },
+    {
+      "text": "the pure happiness in this clip 🥹",
+      "emotion": "joy",
+      "intensity": 8.5
+    },
+    {
+      "text": "this scene fixed something in me 🌸",
+      "emotion": "joy",
+      "intensity": 9.0
+    },
+    {
+      "text": "we don't deserve this much cuteness 🥹",
+      "emotion": "joy",
+      "intensity": 8.7
+    },
+    {
+      "text": "certified serotonin boost 🌞",
+      "emotion": "joy",
+      "intensity": 8.4
+    }
+  ]
+}

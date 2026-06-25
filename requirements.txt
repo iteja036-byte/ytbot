@@ -1,0 +1,20 @@
+# ytbot requirements
+# Install with: pip install -r requirements.txt
+
+# Core video
+yt-dlp>=2024.1.0
+
+# Instagram upload
+instagrapi>=2.0.0
+
+# TikTok upload
+tiktok-uploader>=1.0.0
+
+# YouTube upload
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.1.0
+google-auth-oauthlib>=1.0.0
+
+# Image processing (used in select_clips fallback)
+Pillow>=10.0.0
+

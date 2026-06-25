@@ -1,0 +1,33 @@
+[
+  {
+    "sequence_order": 1,
+    "file": "clip_00.mp4",
+    "narrative_role": "The Rock Bottom / Introduction",
+    "tags": ["sad", "alone", "rain", "pain"]
+  },
+  {
+    "sequence_order": 2,
+    "file": "clip_01.mp4",
+    "narrative_role": "The Flashback / Better Days",
+    "tags": ["friendship", "loyalty", "smile"]
+  },
+  {
+    "sequence_order": 3,
+    "file": "clip_03.mp4",
+    "narrative_role": "The Turning Point / Inciting Incident",
+    "tags": ["betrayal", "dark", "anger"]
+  },
+  {
+    "sequence_order": 4,
+    "file": "clip_02.mp4",
+    "narrative_role": "The Climax / Conflict",
+    "tags": ["rage", "fight", "power"]
+  },
+  {
+    "sequence_order": 5,
+    "file": "clip_04.mp4",
+    "narrative_role": "The Resolution / Triumph",
+    "tags": ["hope", "rise", "motivation"]
+  }
+]
+

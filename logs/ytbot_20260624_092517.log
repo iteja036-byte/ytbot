@@ -1,0 +1,129 @@
+2026-06-24 09:25:17,168 [INFO] STEP: Pre-flight checks
+2026-06-24 09:25:17,170 [INFO] validator: 37/37 captions valid across 6 moods
+2026-06-24 09:25:17,171 [INFO] captions.json: valid (37 captions)
+2026-06-24 09:25:17,913 [INFO] ffmpeg: available
+2026-06-24 09:25:20,163 [INFO] yt-dlp: available
+2026-06-24 09:25:20,163 [INFO] Pre-flight complete
+2026-06-24 09:25:20,201 [INFO] STEP: 🔥 ytbot pipeline starting
+2026-06-24 09:25:20,202 [INFO]   Mood forced: sad
+2026-06-24 09:25:20,216 [INFO] STEP: [fetch_video]
+2026-06-24 09:25:20,216 [INFO] STEP: Searching YouTube: 'anime sad edit'
+2026-06-24 09:25:20,217 [INFO] Download attempt 1/3 — format: bestvideo[height<=1080][ext=mp4]+bestaud…
+2026-06-24 09:26:10,740 [INFO] Downloaded: source_video.mp4 (33.1 MB)
+2026-06-24 09:26:10,744 [INFO] fetch_video.py — DONE
+2026-06-24 09:26:10,744 [INFO] fetch_video completed in 50.5s
+2026-06-24 09:26:10,754 [INFO] STEP: [find_scenes]
+2026-06-24 09:26:10,944 [INFO] Video duration: 256.67s
+2026-06-24 09:26:10,944 [INFO] Running scene detection (threshold=0.35)…
+2026-06-24 09:27:03,598 [INFO] Raw scene cuts detected: 0
+2026-06-24 09:27:03,601 [WARNING] No scenes detected at current threshold. Try lowering SCENE_THRESHOLD in config.py
+2026-06-24 09:27:03,602 [WARNING] Falling back to uniform 4-second splits
+2026-06-24 09:27:03,603 [INFO] Final clip count: 15 scenes
+2026-06-24 09:27:03,603 [INFO]   Scene 00 → 0.00s
+2026-06-24 09:27:03,603 [INFO]   Scene 01 → 4.00s
+2026-06-24 09:27:03,603 [INFO]   Scene 02 → 8.00s
+2026-06-24 09:27:03,604 [INFO]   Scene 03 → 12.00s
+2026-06-24 09:27:03,604 [INFO]   Scene 04 → 16.00s
+2026-06-24 09:27:03,604 [INFO]   Scene 05 → 20.00s
+2026-06-24 09:27:03,604 [INFO]   Scene 06 → 24.00s
+2026-06-24 09:27:03,604 [INFO]   Scene 07 → 28.00s
+2026-06-24 09:27:03,605 [INFO]   Scene 08 → 32.00s
+2026-06-24 09:27:03,605 [INFO]   Scene 09 → 36.00s
+2026-06-24 09:27:03,605 [INFO]   Scene 10 → 40.00s
+2026-06-24 09:27:03,605 [INFO]   Scene 11 → 44.00s
+2026-06-24 09:27:03,606 [INFO]   Scene 12 → 48.00s
+2026-06-24 09:27:03,606 [INFO]   Scene 13 → 52.00s
+2026-06-24 09:27:03,606 [INFO]   Scene 14 → 56.00s
+2026-06-24 09:27:03,608 [INFO] Saved: scenes.json
+2026-06-24 09:27:03,609 [INFO] find_scenes.py — DONE
+2026-06-24 09:27:03,609 [INFO] find_scenes completed in 52.9s
+2026-06-24 09:27:03,616 [INFO] STEP: [cut_clips]
+2026-06-24 09:27:03,637 [INFO] STEP: Cutting 15 clips…
+2026-06-24 09:27:03,637 [INFO]   Cutting clip_00.mp4 @ 0.00s  dur=4.00s
+2026-06-24 09:27:13,897 [INFO]   Cutting clip_01.mp4 @ 4.00s  dur=4.00s
+2026-06-24 09:27:28,749 [INFO]   Cutting clip_02.mp4 @ 8.00s  dur=4.00s
+2026-06-24 09:27:45,203 [INFO]   Cutting clip_03.mp4 @ 12.00s  dur=4.00s
+2026-06-24 09:28:02,241 [INFO]   Cutting clip_04.mp4 @ 16.00s  dur=4.00s
+2026-06-24 09:28:18,871 [INFO]   Cutting clip_05.mp4 @ 20.00s  dur=4.00s
+2026-06-24 09:28:46,571 [INFO]   Cutting clip_06.mp4 @ 24.00s  dur=4.00s
+2026-06-24 09:29:11,129 [INFO]   Cutting clip_07.mp4 @ 28.00s  dur=4.00s
+2026-06-24 09:29:35,933 [INFO]   Cutting clip_08.mp4 @ 32.00s  dur=4.00s
+2026-06-24 09:30:05,158 [INFO]   Cutting clip_09.mp4 @ 36.00s  dur=4.00s
+2026-06-24 09:30:29,363 [INFO]   Cutting clip_10.mp4 @ 40.00s  dur=4.00s
+2026-06-24 09:30:55,191 [INFO]   Cutting clip_11.mp4 @ 44.00s  dur=4.00s
+2026-06-24 09:31:22,295 [INFO]   Cutting clip_12.mp4 @ 48.00s  dur=4.00s
+2026-06-24 09:31:51,998 [INFO]   Cutting clip_13.mp4 @ 52.00s  dur=4.00s
+2026-06-24 09:32:25,891 [INFO]   Cutting clip_14.mp4 @ 56.00s  dur=200.67s
+2026-06-24 09:34:26,081 [WARNING] Timeout cutting clip at 56.00s
+2026-06-24 09:34:26,095 [WARNING]   Skipped clip_14.mp4 (cut failed)
+2026-06-24 09:34:26,096 [INFO] Cut 14/15 clips → /data/data/com.termux/files/home/ytbot/clips
+2026-06-24 09:34:26,096 [INFO] cut_clips.py — DONE
+2026-06-24 09:34:26,099 [INFO] cut_clips completed in 442.5s
+2026-06-24 09:34:26,143 [INFO] STEP: [select_clips]
+2026-06-24 09:34:26,145 [INFO] STEP: Scoring 15 clips for quality…
+2026-06-24 09:34:27,886 [INFO]   clip_00.mp4 → score: 30.0
+2026-06-24 09:34:28,867 [INFO]   clip_01.mp4 → score: 30.0
+2026-06-24 09:34:30,178 [INFO]   clip_02.mp4 → score: 30.0
+2026-06-24 09:34:31,337 [INFO]   clip_03.mp4 → score: 30.0
+2026-06-24 09:34:32,551 [INFO]   clip_04.mp4 → score: 30.0
+2026-06-24 09:34:33,760 [INFO]   clip_05.mp4 → score: 30.0
+2026-06-24 09:34:35,063 [INFO]   clip_06.mp4 → score: 30.0
+2026-06-24 09:34:36,385 [INFO]   clip_07.mp4 → score: 30.0
+2026-06-24 09:34:37,483 [INFO]   clip_08.mp4 → score: 30.0
+2026-06-24 09:34:38,696 [INFO]   clip_09.mp4 → score: 30.0
+2026-06-24 09:34:40,003 [INFO]   clip_10.mp4 → score: 30.0
+2026-06-24 09:34:41,097 [INFO]   clip_11.mp4 → score: 30.0
+2026-06-24 09:34:42,179 [INFO]   clip_12.mp4 → score: 30.0
+2026-06-24 09:34:43,398 [INFO]   clip_13.mp4 → score: 30.0
+2026-06-24 09:34:43,827 [WARNING]   Could not extract frame from clip_14
+2026-06-24 09:34:43,827 [INFO]   clip_14.mp4 → score: 0.0
+2026-06-24 09:34:43,828 [INFO] Selected 12 clips for reel
+2026-06-24 09:34:43,828 [INFO]   → clip_00.mp4
+2026-06-24 09:34:43,828 [INFO]   → clip_01.mp4
+2026-06-24 09:34:43,829 [INFO]   → clip_02.mp4
+2026-06-24 09:34:43,829 [INFO]   → clip_03.mp4
+2026-06-24 09:34:43,829 [INFO]   → clip_04.mp4
+2026-06-24 09:34:43,829 [INFO]   → clip_05.mp4
+2026-06-24 09:34:43,829 [INFO]   → clip_06.mp4
+2026-06-24 09:34:43,829 [INFO]   → clip_07.mp4
+2026-06-24 09:34:43,829 [INFO]   → clip_08.mp4
+2026-06-24 09:34:43,830 [INFO]   → clip_09.mp4
+2026-06-24 09:34:43,830 [INFO]   → clip_10.mp4
+2026-06-24 09:34:43,830 [INFO]   → clip_11.mp4
+2026-06-24 09:34:43,833 [INFO] Saved: chosen.txt (12 clips)
+2026-06-24 09:34:43,834 [INFO] select_clips.py — DONE
+2026-06-24 09:34:43,834 [INFO] select_clips completed in 17.7s
+2026-06-24 09:34:43,847 [INFO] STEP: [clean_srt]
+2026-06-24 09:34:43,852 [WARNING] No SRT file found — skipping subtitle cleaning
+2026-06-24 09:34:43,852 [INFO] clean_srt completed in 0.0s
+2026-06-24 09:34:43,860 [INFO] STEP: [make_subs]
+2026-06-24 09:34:43,860 [WARNING] No subtitle file found — skipping ASS generation
+2026-06-24 09:34:43,861 [INFO] make_subs completed in 0.0s
+2026-06-24 09:34:43,881 [INFO] STEP: [brain]
+2026-06-24 09:34:43,884 [INFO] Loaded captions.json
+2026-06-24 09:34:43,884 [INFO]   Caption : they left and took the warmth with them 🥀
+2026-06-24 09:34:43,885 [INFO]   Emotion : heartbreak  (score: 19.0)
+2026-06-24 09:34:43,885 [INFO]   Tags    : #heartbreak #sadanime #animeedit #fyp #viral #sadvibes #animelove
+2026-06-24 09:34:43,885 [INFO] brain completed in 0.0s
+2026-06-24 09:34:43,894 [INFO] STEP: [build_reel]
+2026-06-24 09:34:43,895 [INFO] STEP: Building final reel…
+2026-06-24 09:34:43,896 [INFO]   12 clips loaded
+2026-06-24 09:34:44,122 [INFO]   Trimming clip_00 → 2.00s
+2026-06-24 09:34:48,548 [INFO]   Trimming clip_01 → 1.60s
+2026-06-24 09:34:53,409 [INFO]   Trimming clip_02 → 1.20s
+2026-06-24 09:34:57,284 [INFO]   Trimming clip_03 → 1.00s
+2026-06-24 09:35:00,449 [INFO]   Trimming clip_04 → 0.80s
+2026-06-24 09:35:02,702 [INFO]   Trimming clip_05 → 0.70s
+2026-06-24 09:35:05,146 [INFO]   Trimming clip_06 → 0.60s
+2026-06-24 09:35:07,264 [INFO]   Trimming clip_07 → 0.50s
+2026-06-24 09:35:09,018 [INFO]   Trimming clip_08 → 0.45s
+2026-06-24 09:35:10,794 [INFO]   Trimming clip_09 → 0.40s
+2026-06-24 09:35:12,557 [INFO]   Trimming clip_10 → 0.35s
+2026-06-24 09:35:14,087 [INFO]   Trimming clip_11 → 0.30s
+2026-06-24 09:35:15,154 [INFO]   12 clips trimmed, concatenating…
+2026-06-24 09:35:15,653 [INFO] Final reel: /data/data/com.termux/files/home/ytbot/output/final_reel.mp4 (5.1 MB)
+2026-06-24 09:35:15,653 [INFO] build_reel.py — DONE
+2026-06-24 09:35:15,654 [INFO] build_reel completed in 31.8s
+2026-06-24 09:35:15,654 [INFO] ⏭  Skipping upload (--no-upload)
+2026-06-24 09:35:15,654 [INFO] STEP: Pipeline complete in 595.5s
+2026-06-24 09:35:15,654 [INFO] 🎬 final_reel.mp4 ready → /data/data/com.termux/files/home/ytbot/output/final_reel.mp4 (5.1 MB)

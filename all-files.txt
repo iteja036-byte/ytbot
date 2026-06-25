@@ -1,0 +1,255 @@
+===== run.sh =====
+#!/bin/bash
+set -e
+cd ~/ytbot
+echo ""
+echo "=================================="
+echo "   INTELLIGENT REEL MAKER"
+echo "=================================="
+echo "$(date)"
+echo ""
+echo "[1/4] Generating caption..."
+node generate-text.mjs
+echo ""
+echo "[2/4] Downloading scene..."
+python fetch-online.py
+echo ""
+echo "[3/4] Cleaning subtitles..."
+python clean_srt.py
+echo ""
+echo "[4/4] Rendering reel..."
+node make-reel.mjs
+echo ""
+echo "=================================="
+echo "✅ /sdcard/Download/reel_ready.mp4"
+echo "=================================="
+
+===== generate-text.mjs =====
+import fs from "fs";
+
+const characters = [
+  "Goku",
+  "Gojo",
+  "Sukuna",
+  "Levi",
+  "Eren",
+  "Naruto",
+  "Itachi",
+  "Zoro",
+  "Luffy",
+  "Thor",
+  "Spider-Man",
+  "Tony Stark"
+];
+
+const character =
+  characters[Math.floor(Math.random() * characters.length)];
+
+const queries = [
+  `${character} vertical edit`,
+  `${character} aura edit`,
+  `${character} best moments`,
+  `${character} emotional scene`,
+  `${character} sigma edit`,
+  `${character} shorts`
+];
+
+const captions = [
+  `${character} is technically a menace to society`,
+  `POV: you challenged ${character}`,
+  `${character} carries the entire storyline`,
+  `${character} has more aura than the whole cast`
+];
+
+const selected = {
+  character,
+  query: queries[Math.floor(Math.random() * queries.length)],
+  caption: captions[Math.floor(Math.random() * captions.length)]
+};
+
+fs.writeFileSync(
+  "lines.json",
+  JSON.stringify(selected, null, 2)
+);
+
+console.log(selected);
+
+===== fetch-online.py =====
+import json, os, sys, subprocess, glob
+
+DIR = os.path.dirname(os.path.abspath(__file__))
+data = json.load(open(os.path.join(DIR,'lines.json')))
+query = data.get('search','Tony Stark best scene')
+print(f"Searching: {query}")
+
+# Clean old files
+for f in glob.glob(os.path.join(DIR,'source_video*')): os.unlink(f)
+for f in glob.glob(os.path.join(DIR,'*.vtt')): os.unlink(f)
+for f in glob.glob(os.path.join(DIR,'*.srt')): os.unlink(f)
+
+out = os.path.join(DIR, 'source_video')
+cmd = [
+    'yt-dlp',
+    '--js-runtimes', 'nodejs',
+    f'ytsearch1:{query}',
+    '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]',
+    '--merge-output-format', 'mp4',
+    '--write-auto-subs',
+    '--sub-lang', 'en',
+    '--convert-subs', 'srt',
+    '-o', f'{out}.%(ext)s',
+    '--no-playlist',
+    '--quiet',
+    '--progress'
+]
+print("Downloading video + subtitles...")
+subprocess.run(cmd, cwd=DIR)
+
+# Check video
+files = glob.glob(os.path.join(DIR,'source_video.mp4'))
+if not files:
+    print("ERROR: Download failed"); sys.exit(1)
+
+size = os.path.getsize(files[0]) // (1024*1024)
+print(f"✅ Video: {size}MB")
+
+# Check subtitles
+subs = glob.glob(os.path.join(DIR,'source_video*.srt'))
+if subs:
+    print(f"✅ Subtitles: {os.path.basename(subs[0])}")
+else:
+    print("⚠️ No subtitles found - will run without")
+
+===== clean_srt.py =====
+import re
+import glob
+
+srt = glob.glob("*.srt")[0]
+
+with open(srt, "r", encoding="utf-8", errors="ignore") as f:
+    content = f.read()
+
+blocks = re.split(r"\n\s*\n", content)
+
+cleaned = []
+idx = 1
+
+for block in blocks:
+    lines = block.strip().splitlines()
+
+    if len(lines) < 3:
+        continue
+
+    timecode = lines[1]
+    text = " ".join(lines[2:])
+
+    text = re.sub(r"\[.*?\]", "", text)
+    text = re.sub(r"<.*?>", "", text)
+    text = re.sub(r"[^a-zA-Z0-9 ,.!?'’-]", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    if len(text) < 3:
+        continue
+
+    words = text.split()
+
+    chunks = []
+    chunk_size = 3
+
+    for i in range(0, len(words), chunk_size):
+        chunk = " ".join(words[i:i+chunk_size])
+        chunks.append(chunk)
+
+    for chunk in chunks:
+        cleaned.append(f"{idx}\n{timecode}\n{chunk}\n")
+        idx += 1
+
+output = "cleaned_subs.srt"
+
+with open(output, "w", encoding="utf-8") as f:
+    f.write("\n".join(cleaned))
+
+print(f"✅ Created {output}")
+
+===== make-reel.mjs =====
+import { execSync } from "child_process";
+import fs from "fs";
+
+const data = JSON.parse(fs.readFileSync("lines.json", "utf8"));
+
+const caption = data.caption;
+
+const musicFiles = fs
+  .readdirSync("./music")
+  .filter(f => f.endsWith(".mp3"));
+
+const randomMusic =
+  musicFiles[Math.floor(Math.random() * musicFiles.length)];
+
+const ffmpegCmd = `
+ffmpeg -y \
+-i "source_video.mp4" \
+-i "music/${randomMusic}" \
+-filter_complex "
+
+[0:v]crop=in_w:in_h-80:0:80,
+scale=720:1280:force_original_aspect_ratio=increase,
+crop=720:1280[bg];
+
+[0:v]crop=in_w:in_h-80:0:80,
+scale=720:900:force_original_aspect_ratio=decrease[fg];
+
+[bg]boxblur=18[blur];
+
+[blur][fg]overlay=
+(720-overlay_w)/2:
+180,
+
+drawbox=
+x=0:y=0:w=720:h=150:
+color=black:t=fill,
+
+drawtext=
+text='${caption}':
+fontcolor=white:
+fontsize=32:
+fontfile=/system/fonts/Roboto-Bold.ttf:
+x=(w-text_w)/2:
+y=55,
+
+subtitles=cleaned_subs.srt:
+force_style='FontName=Arial,FontSize=26,Bold=1,PrimaryColour=&HFFFFFF&,BackColour=&H000000&,BorderStyle=4,Outline=0,Shadow=0,Alignment=2,MarginV=320'
+[v];
+
+[1:a]volume=0.12[music];
+
+[0:a][music]
+sidechaincompress=
+threshold=0.008:
+ratio=18:
+attack=5:
+release=300[a]
+
+" \
+-map "[v]" \
+-map "[a]" \
+-t 20 \
+-r 30 \
+-c:v libx264 \
+-preset ultrafast \
+-crf 22 \
+video.mp4
+`;
+
+console.log(ffmpegCmd);
+
+execSync(ffmpegCmd, {
+  stdio: "inherit",
+  shell: "/bin/bash"
+});
+
+execSync(
+  "cp video.mp4 /sdcard/Download/reel_ready.mp4"
+);
+
+console.log("DONE");

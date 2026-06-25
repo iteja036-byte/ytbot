@@ -1,0 +1,2491 @@
+
+========================================
+FILE: auto-cut.py
+========================================
+import os
+
+times = [
+    1.43, 2.97, 4.47, 5.83, 7.4,
+    8.73, 9.43, 11.93, 13.43, 14.73, 15.7
+]
+
+os.makedirs("clips", exist_ok=True)
+
+for i in range(len(times) - 1):
+
+    start = times[i]
+    duration = times[i + 1] - start
+
+    if duration < 0.8:
+        continue
+
+    cmd = (
+        f'ffmpeg -y '
+        f'-ss {start} '
+        f'-i source_video.mp4 '
+        f'-t {duration} '
+        f'-vf "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280" '
+        f'-an '
+        f'clips/clip_{i:02d}.mp4'
+    )
+
+    os.system(cmd)
+
+print("DONE")
+
+========================================
+FILE: brain.py
+========================================
+def select_caption(captions, mood):
+    filtered = []
+
+    for c in captions:
+        if mood == "sad" and c["emotion"] in ["sad-love", "heartbreak", "missing-you"]:
+            filtered.append(c)
+
+    filtered.sort(key=lambda x: x["intensity"], reverse=True)
+
+    return filtered[0]
+
+
+def viral_score(caption):
+    emotion_boost = {
+        "heartbreak": 2,
+        "sad-love": 1.5,
+        "missing-you": 1.2
+    }
+
+    return caption["intensity"] * emotion_boost.get(caption["emotion"], 1)
+
+
+def select_tags(tags):
+    return sorted(tags, key=lambda x: x["score"], reverse=True)[:2]
+
+
+def brain_v2(data, mood):
+    caption = select_caption(data["captions"], mood)
+
+    tags = select_tags([
+        {"name": "AnimeLove", "score": 0.9},
+        {"name": "SadRomance", "score": 0.95},
+        {"name": "ViralReel", "score": 0.7}
+    ])
+
+    return {
+        "caption": caption["text"],
+        "emotion": caption["emotion"],
+        "viral_score": viral_score(caption),
+        "tags": [t["name"] for t in tags]
+    }
+
+========================================
+FILE: build-clips.py
+========================================
+import os
+from moviepy.editor import ImageClip, concatenate_videoclips
+
+folder = "clips"
+
+if not os.path.exists("chosen.txt"):
+    print("ERROR: chosen.txt missing")
+    exit(1)
+
+with open("chosen.txt") as f:
+    scenes = [x.strip() for x in f.readlines() if x.strip()]
+
+clips = []
+
+durations = [0.8, 0.7, 0.6, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.25, 0.2]
+
+for i, scene in enumerate(scenes):
+
+    path = os.path.join(folder, scene)
+
+    if not os.path.exists(path):
+        print(f"SKIP missing: {path}")
+        continue
+
+    d = durations[i] if i < len(durations) else 0.2
+
+    clip = (
+        ImageClip(path)
+        .with_duration(d)
+        .resized(height=1280)
+    )
+
+    clips.append(clip)
+
+if not clips:
+    print("ERROR: no clips found")
+    exit(1)
+
+final = concatenate_videoclips(clips, method="compose")
+
+final.write_videofile(
+    "preview.mp4",
+    fps=30,
+    codec="libx264",
+    audio=False
+)
+
+print("DONE: preview.mp4")
+
+========================================
+FILE: clean_srt.py
+========================================
+import re
+import glob
+import os
+
+files = glob.glob("*.srt")
+if not files:
+    print("❌ No SRT file found")
+    exit(1)
+
+srt = files[0]
+
+with open(srt, "r", encoding="utf-8", errors="ignore") as f:
+    content = f.read()
+
+# Split into structured blocks cleanly
+blocks = re.split(r"\n\s*\n", content.strip())
+cleaned = []
+idx = 1
+
+def clean_text(text):
+    text = re.sub(r"\[.*?\]", "", text)
+    text = re.sub(r"<.*?>", "", text)
+    # Remove weird generic transcription loops or errors
+    text = re.sub(r"(mr stark|iron man|daddy's home|christmas story)", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"[^a-zA-Z0-9 ,.!?'’-]", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+for block in blocks:
+    lines = block.strip().splitlines()
+    if len(lines) < 3:
+        continue
+    
+    timecode = lines[1]
+    text = clean_text(" ".join(lines[2:]))
+    
+    if len(text) < 2 or len(text.split()) > 6:
+        continue # Keeps chunks small, fast, and punchy for short-form edits
+        
+    cleaned.append(f"{idx}\n{timecode}\n{text}\n")
+    idx += 1
+
+output = "cleaned_subs.srt"
+with open(output, "w", encoding="utf-8") as f:
+    f.write("\n".join(cleaned))
+
+print(f"✅ Cleaned subtitle text mapping track created.")
+
+========================================
+FILE: cut-scene.py
+========================================
+import os
+import subprocess
+import re
+
+# Ensure output directory exists
+output_dir = "clips"
+os.makedirs(output_dir, exist_ok=True)
+
+video_input = "source_video.mp4"
+threshold = 0.45  # Match your original scene detection sensitivity
+
+print("Analyzing video for scene changes... (This may take a moment)")
+
+# Step 1: Run FFmpeg to find scene change timestamps
+# We use ffprobe/ffmpeg to output log info without writing heavy files yet
+cmd_detect = [
+    "ffmpeg", "-i", video_input,
+    "-filter_complex", f"select='gt(scene,{threshold})',showinfo",
+    "-f", "null", "-"
+]
+
+# Capture the FFmpeg output text
+result = subprocess.run(cmd_detect, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+
+# Step 2: Extract timestamps using regex from the 'showinfo' log
+# Look for patterns like pts_time:12.345
+timestamps = [0.0]  # Start at the beginning of the video
+matches = re.findall(r"pts_time:(\d+\.\d+)", result.stderr)
+
+for match in matches:
+    timestamps.append(float(match))
+
+# Remove duplicates and sort
+timestamps = sorted(list(set(timestamps)))
+print(f"Detected {len(timestamps) - 1} scene cuts at timestamps: {timestamps[1:]}")
+
+# Step 3: Cut the video into individual .mp4 clips based on those timestamps
+for i in range(len(timestamps)):
+    start_time = timestamps[i]
+    
+    # If it's the last scene, let it run to the end of the video
+    if i == len(timestamps) - 1:
+        # Check if the last segment is too short to bother cutting
+        break 
+    else:
+        end_time = timestamps[i + 1]
+        duration = end_time - start_time
+    
+    # Format file name to match your JSON (e.g., clip_00.mp4, clip_01.mp4)
+    output_file = os.path.join(output_dir, f"clip_{i:02d}.mp4")
+    
+    # Fast seek (-ss before -i) and stream copy (-c copy) for instant, lossless cutting
+    cmd_cut = [
+        "ffmpeg", "-y",
+        "-ss", str(start_time),
+        "-i", video_input,
+        "-t", str(duration),
+        "-c", "copy",  # Fast execution without re-encoding
+        output_file
+    ]
+    
+    subprocess.run(cmd_cut, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"Generated: {output_file} ({start_time:.2f}s -> {end_time:.2f}s)")
+
+print("\nDONE! All clips successfully generated.")
+
+
+========================================
+FILE: cut.py
+========================================
+import os
+
+# Ensure the clips directory exists
+if not os.path.exists("clips"):
+    print("Error: 'clips' directory not found.")
+    exit()
+
+# Get all files starting with "raw_"
+raws = sorted([x for x in os.listdir("clips") if x.startswith("raw_")])
+
+for i, f in enumerate(raws):
+    print(f"PROCESS_CLIP [{i:02d}]: {f}")
+
+    # -ss before -i for faster, accurate seeking when re-encoding
+    # Added fps=30 (or change to 60 if you prefer) and fixed formatting quotes
+    cmd = f'''ffmpeg -y \
+-ss 5 \
+-i "clips/{f}" \
+-t 3 \
+-vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30" \
+-an \
+"clips/clip_{i:02d}.mp4"'''
+
+    os.system(cmd)
+
+print("🔥 SCENES CUT & FORMATTED TO 9:16")
+
+
+========================================
+FILE: fetch-clips.py
+========================================
+import os
+import shutil
+
+# Using expanduser guarantees it handles the home directory (~) across Unix/Linux systems
+SRC = os.path.expanduser("~/ytbot/myclips")
+DST = os.path.expanduser("~/ytbot/clips")
+
+# Step 1: Clean or create the destination directory safely
+if os.path.exists(DST):
+    # Deletes the entire directory tree (files AND folders) to guarantee a 100% clean slate
+    shutil.rmtree(DST)
+os.makedirs(DST, exist_ok=True)
+
+# Step 2: Gather and sort the generated mp4 files
+if not os.path.exists(SRC):
+    print(f"❌ Error: Source directory {SRC} does not exist!")
+    exit(1)
+
+videos = sorted([
+    x for x in os.listdir(SRC)
+    if x.lower().endswith(".mp4")  # .lower() catches .MP4 edge cases
+])
+
+# Step 3: Select the top 8 clips
+selected = videos[:8]
+
+if not selected:
+    print("⚠ No .mp4 files found in the source directory.")
+    exit()
+
+print(f"Staging {len(selected)} clips for final export...\n")
+
+# Step 4: Copy and rename files sequentially
+for i, v in enumerate(selected):
+    src_path = os.path.join(SRC, v)
+    dst_path = os.path.join(DST, f"clip_{i:02d}.mp4")
+
+    # shutil.copy2 preserves original file metadata (creation/modification time)
+    shutil.copy2(src_path, dst_path)
+    print(f"✅ Staged: {v} -> clip_{i:02d}.mp4")
+
+print("\n🔥 BATCH READY FOR PRODUCTION")
+
+
+========================================
+FILE: fetch-online.py
+========================================
+import json
+import os
+import sys
+import subprocess
+import glob
+
+DIR = os.path.dirname(os.path.abspath(__file__))
+json_path = os.path.join(DIR, 'lines.json')
+
+# Ensure JSON exists or mock it for safety
+if os.path.exists(json_path):
+    with open(json_path, 'r') as f:
+        data = json.load(f)
+else:
+    data = {}
+
+# 1. Fixed truncated fallback query string
+query = data.get('search') or data.get('query') or data.get('searchQuery') or "Trending Anime Scene"
+print(f"🔍 Searching YouTube for: '{query}'")
+
+# Clean up previous runs safely
+for f in glob.glob(os.path.join(DIR, 'source_video*')):
+    try:
+        os.unlink(f)
+    except OSError:
+        pass
+
+out_base = os.path.join(DIR, 'source_video')
+
+# 2. Fixed truncated format string to cleanly grab 720p MP4 combinations
+cmd = [
+    'yt-dlp',
+    '--js-runtimes', 'node',
+    f'ytsearch1:{query}',
+    '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]',
+    '--merge-output-format', 'mp4',
+    '--write-auto-subs', '--sub-lang', 'en', '--convert-subs', 'srt',
+    '-o', f'{out_base}.%(ext)s',
+    '--no-playlist', '--quiet', '--progress',
+    '--sleep-requests', '3'
+]
+
+print("⏳ Downloading via yt-dlp...")
+subprocess.run(cmd, cwd=DIR)
+
+# 3. Cleaned up exact file checking instead of using glob for static names
+expected_video = os.path.join(DIR, 'source_video.mp4')
+
+if not os.path.exists(expected_video):
+    print("❌ ERROR: Download failed or file was not merged to MP4.")
+    sys.exit(1)
+
+size_mb = os.path.getsize(expected_video) // (1024 * 1024)
+print(f"✅ Video Downloaded: {size_mb}MB")
+
+# Locate downloaded subtitles
+subs = glob.glob(os.path.join(DIR, 'source_video*.srt'))
+if subs:
+    print(f"✅ Subtitles Saved: {os.path.basename(subs[0])
+
+
+========================================
+FILE: fetch-video.py
+========================================
+import os
+import sys
+import subprocess
+import glob
+
+# Gather search query from command line args
+query = " ".join(sys.argv[1:]).strip()
+if not query:
+    query = "anime edit"
+
+print(f"🔍 SEARCHING YOUTUBE FOR: '{query}'")
+
+# Clean up older source videos from previous runs to avoid false positives
+for f in glob.glob("source_video*"):
+    try:
+        os.unlink(f)
+    except OSError:
+        pass
+
+# Upgraded yt-dlp arguments
+cmd = [
+    "yt-dlp",
+    f"ytsearch1:{query}",  # Download only the top single result to avoid filename collisions
+    "--extractor-args", "youtube:player_client=android",
+    # Download best video (up to 1080p) and best audio, then merge them into an MP4
+    "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]",
+    "--merge-output-format", "mp4",
+    "--no-playlist",
+    "-o", "source_video.%(ext)s"
+]
+
+try:
+    # Run securely using subprocess instead of the outdated os.system
+    subprocess.run(cmd, check=True)
+except subprocess.CalledProcessError:
+    print("❌ yt-dlp encountered an error during download.")
+
+# Explicit check for the expected output file
+if os.path.exists("source_video.mp4"):
+    file_size = os.path.getsize("source_video.mp4") // (1024 * 1024)
+    print(f"✅ DOWNLOADED SUCCESSFULLY ({file_size} MB)")
+else:
+    print("❌ FAILED: 'source_video.mp4' was not created.")
+
+
+========================================
+FILE: find-scenes.py
+========================================
+import os
+import re
+import subprocess
+
+video_input = "source_video.mp4"
+
+if not os.path.exists(video_input):
+    print(f"❌ Error: '{video_input}' not found in the current directory.")
+    exit(1)
+
+print("🎬 Analyzing video for scene changes...")
+
+# Upgrade: Use subprocess to run FFmpeg and capture logs directly in memory
+# We use 'showinfo' inside filter_complex because it reliably prints 'pts_time'
+cmd = [
+    "ffmpeg", "-i", video_input,
+    "-filter_complex", "select='gt(scene,0.4)',showinfo",
+    "-f", "null", "-"
+]
+
+# Run command and pipe stderr (where FFmpeg prints its packet information)
+result = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+
+# Fixed Regex: Using a raw string r'' and matching 'pts_time:XX.XX' accurately
+matches = re.findall(r"pts_time:(\d+\.\d+)", result.stderr)
+
+# Convert string timestamps to unique, sorted float numbers
+# (Using set() removes any duplicate frame logs from the same scene boundary)
+times = sorted(list(set([float(m) for m in matches])))
+
+print("\n🚀 SCENES DETECTED:")
+if not times:
+    print("No drastic scene cuts found. Try lowering the threshold (e.g., to 0.3)")
+else:
+    # Limit to the first 12 scene cuts as requested
+    for i, t in enumerate(times[:12]):
+        print(f"Scene {i:02d} => {round(t, 2)} sec")
+
+
+========================================
+FILE: main.py
+========================================
+from validator import validate_and_fix
+
+data = validate_and_fix("captions.json")
+
+if not data:
+    print("STOP: invalid data")
+    exit(1)
+
+print("READY FOR YTBOT BRAIN")
+print(data)
+
+========================================
+FILE: make_ass.py
+========================================
+import re, os, sys
+
+DIR = os.path.dirname(os.path.abspath(__file__))
+srt_files = ['cleaned_subs.srt'] if os.path.exists(os.path.join(DIR,'cleaned_subs.srt')) else [f for f in os.listdir(DIR) if f.startswith('source_video') and f.endswith('.srt')]
+if not srt_files:
+    print("No SRT found"); sys.exit(0)
+
+srt_path = os.path.join(DIR, srt_files[0])
+ass_path = os.path.join(DIR, 'subs.ass')
+
+with open(srt_path, 'r', encoding='utf-8', errors='ignore') as f:
+    content = f.read()
+
+# ASS header — small font, bottom center, fade-in effect
+header = """[Script Info]
+ScriptType: v4.00+
+PlayResX: 720
+PlayResY: 1280
+WrapStyle: 1
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,16,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,2,1,2,20,20,25,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+
+def srt_time_to_ass(t):
+    t = t.replace(',', '.')
+    h, m, s = t.split(':')
+    s, ms = s.split('.')
+    return f"{int(h)}:{m}:{s}.{ms[:2]}"
+
+blocks = content.strip().split('\n\n')
+events = []
+for block in blocks:
+    lines = block.strip().split('\n')
+    if len(lines) < 3: continue
+    time_line = lines[1]
+    text_lines = ' '.join(lines[2:])
+    # Remove sound effects
+    text_lines = re.sub(r'\[[^\]]+\]', '', text_lines).strip()
+    text_lines = text_lines.replace('♪','').replace('♫','').strip()
+    if not text_lines: continue
+    # Parse timestamps
+    m = re.match(r'(\S+)\s+-->\s+(\S+)', time_line)
+    if not m: continue
+    start = srt_time_to_ass(m.group(1))
+    end = srt_time_to_ass(m.group(2))
+    # Add fade-in wave effect \fad(200,0) = fade in 200ms, no fade out
+    text = text_lines.replace('\n', '\\N')
+    events.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{{\\fad(200,0)}}{text}")
+
+with open(ass_path, 'w', encoding='utf-8') as f:
+    f.write(header + '\n'.join(events))
+
+print(f"✅ ASS subtitles: {len(events)} lines → subs.ass")
+
+========================================
+FILE: select-scenes.py
+========================================
+import os
+import random
+from PIL import Image
+
+folder = "clips"
+
+imgs = sorted([x for x in os.listdir(folder) if x.endswith(".jpg")])
+
+selected = []
+
+for img in imgs:
+    path = os.path.join(folder, img)
+
+    try:
+        im = Image.open(path)
+
+        w,h = im.size
+
+        # reject dark/useless frames
+        stat = im.resize((1,1)).getpixel((0,0))
+
+        bright = sum(stat)/3
+
+        if bright < 40:
+            continue
+
+        # keep only good cinematic frames
+        if random.random() > 0.08:
+            continue
+
+        selected.append(img)
+
+    except:
+        pass
+
+selected = selected[:12]
+
+print("\nBEST SCENES:\n")
+
+for i,x in enumerate(selected):
+    print(i,"=>",x)
+
+with open("chosen.txt","w") as f:
+    for x in selected:
+        f.write(x+"\n")
+
+print("\nDONE")
+
+========================================
+FILE: selector.py
+========================================
+import os
+import json
+
+base_dir = os.path.dirname(os.path.abspath(__file__))
+lines_path = os.path.join(base_dir, "lines.json")
+clips_dir = os.path.join(base_dir, "myclips")
+
+if not os.path.exists(clips_dir) or not os.listdir(clips_dir):
+    clips_dir = os.path.join(base_dir, "clips")
+
+print(f"🔍 Dynamic Scanner target: {clips_dir}")
+
+valid_clips = sorted([
+    f for f in os.listdir(clips_dir) 
+    if f.lower().endswith(('.mp4', '.mkv', '.mov'))
+])
+
+if not valid_clips:
+    print("⚠️ Warning: No clip segments found inside workspace targets.")
+    with open(os.path.join(base_dir, "chosen.txt"), "w") as f:
+        f.write("")
+    exit(0)
+
+selected_clips = valid_clips[:8]
+output_txt_path = os.path.join(base_dir, "chosen.txt")
+
+with open(output_txt_path, "w", encoding='utf-8') as f:
+    for clip in selected_clips:
+        f.write(os.path.join(clips_dir, clip) + "\n")
+
+print(f"🔥 Matrix generated: {len(selected_clips)} clips mapped -> chosen.txt")
+
+========================================
+FILE: srt_to_ass.py
+========================================
+import re
+import os
+import sys
+
+DIR = os.path.dirname(os.path.abspath(__file__))
+
+srt_files = ['cleaned_subs.srt'] if os.path.exists(os.path.join(DIR, 'cleaned_subs.srt')) else [f for f in os.listdir(DIR) if f.startswith('source_video') and f.endswith('.srt')]
+
+if not srt_files:
+    print("⚠️ No SRT input subtitles found in workspace directory.")
+    sys.exit(0)
+
+srt_path = os.path.join(DIR, srt_files[0])
+ass_path = os.path.join(DIR, 'subs.ass')
+
+print(f"CNVRT: {os.path.basename(srt_path)} -> subs.ass")
+with open(srt_path, 'r', encoding='utf-8', errors='ignore') as f:
+    content = f.read()
+
+header = """[Script Info]
+ScriptType: v4.00+
+PlayResX: 720
+PlayResY: 1280
+WrapStyle: 1
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,34,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,0,2,30,30,420,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+
+def srt_time_to_ass(time_str):
+    time_str = time_str.strip().replace(',', '.')
+    if '.' not in time_str:
+        time_str += '.000'
+    parts = time_str.split(':')
+    if len(parts) != 3:
+        return "0:00:00.00"
+    h = int(parts[0])
+    m = parts[1]
+    s_parts = parts[2].split('.')
+    s = s_parts[0]
+    ms = s_parts[1][:2]
+    return f"{h}:{m}:{s}.{ms}"
+
+blocks = re.split(r'\n\s*\n', content.strip())
+events = []
+
+for block in blocks:
+    lines = [l.strip() for l in block.strip().split('\n') if l.strip()]
+    if len(lines) < 3:
+        continue
+    
+    time_line = lines[1]
+    text_lines = ' '.join(lines[2:])
+    
+    text_lines = re.sub(r'\[[^\]]+\]', '', text_lines)
+    text_lines = re.sub(r'\([^)]+\)', '', text_lines)
+    text_lines = text_lines.replace('♪', '').replace('♫', '').strip()
+    
+    if not text_lines:
+        continue
+        
+    text_lines = text_lines.upper()
+    m = re.match(r'(\S+)\s+-->\s+(\S+)', time_line)
+    if not m:
+        continue
+        
+    start = srt_time_to_ass(m.group(1))
+    end = srt_time_to_ass(m.group(2))
+    
+    events.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text_lines}")
+
+with open(ass_path, 'w', encoding='utf-8') as f:
+    f.write(header + '\n'.join(events))
+
+print(f"✅ Created subs.ass ({len(events)} segments)")
+
+========================================
+FILE: subtitle_brain_v4.py
+========================================
+import re
+import glob
+import json
+import os
+from groq import Groq
+
+# ---------------- LOAD ENV ----------------
+def load_env():
+    try:
+        with open(".env", "r") as f:
+            for line in f:
+                if "=" in line:
+                    k, v = line.strip().split("=", 1)
+                    os.environ[k] = v
+    except:
+        print("❌ .env missing")
+
+
+load_env()
+
+client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+# ---------------- FILE ----------------
+files = glob.glob("*.srt")
+
+if not files:
+    print("❌ No SRT file found")
+    exit(1)
+
+srt = files[0]
+
+with open(srt, "r", encoding="utf-8", errors="ignore") as f:
+    content = f.read()
+
+blocks = re.split(r"\n\s*\n", content)
+
+cleaned = []
+idx = 1
+
+
+# ---------------- CLEAN ----------------
+def clean_text(text):
+    text = re.sub(r"\[.*?\]", "", text)
+    text = re.sub(r"<.*?>", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+# ---------------- AI EMOTION ENGINE ----------------
+def ai_analyze(text):
+    try:
+        res = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """
+You are a short-form video emotion analyzer.
+
+Return ONLY JSON:
+{
+  "emotion": "love|sad|anger|neutral",
+  "intensity": 1-10,
+  "hook_score": 1-10
+}
+
+Rules:
+- Based on emotional impact for reels
+- Hook_score = viral opening strength
+"""
+                },
+                {
+                    "role": "user",
+                    "content": text
+                }
+            ],
+            temperature=0.4
+        )
+
+        return json.loads(res.choices[0].message.content)
+
+    except:
+        return {"emotion": "neutral", "intensity": 5, "hook_score": 5}
+
+
+# ---------------- SMART SPLIT ----------------
+def smart_split(words):
+    chunks = []
+    current = []
+
+    for w in words:
+        current.append(w)
+
+        if len(current) >= 6 or any(p in w for p in [",", ".", "!", "?"]):
+            chunks.append(" ".join(current))
+            current = []
+
+    if current:
+        chunks.append(" ".join(current))
+
+    return chunks
+
+
+# ---------------- MAIN ----------------
+for block in blocks:
+    lines = block.strip().splitlines()
+
+    if len(lines) < 3:
+        continue
+
+    timecode = lines[1]
+    text = clean_text(" ".join(lines[2:]))
+
+    if len(text) < 3:
+        continue
+
+    ai = ai_analyze(text)
+
+    words = text.split()
+    chunks = smart_split(words)
+
+    for chunk in chunks:
+
+        score = (ai["intensity"] * 1.5) + ai["hook_score"]
+
+        cleaned.append(
+            f"{idx}\n{timecode}\n{chunk} [{ai['emotion']}|{score:.1f}]\n"
+        )
+
+        idx += 1
+
+
+output = "cleaned_subs_v4_ai.srt"
+
+with open(output, "w", encoding="utf-8") as f:
+    f.write("\n".join(cleaned))
+
+print(f"✅ AI Subtitle Brain v4 created: {output}")
+
+========================================
+FILE: subtitle_brain_v6.py
+========================================
+import re
+import glob
+from collections import defaultdict
+
+input_file = "cleaned_subs_v5_fixed.srt"
+output_file = "cleaned_subs_v6_flow.srt"
+
+with open(input_file, "r", encoding="utf-8", errors="ignore") as f:
+    content = f.read()
+
+blocks = re.split(r"\n\s*\n", content)
+
+# ---------------- CLEAN TEXT ----------------
+def clean(text):
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+# ---------------- GROUP BY TIME ----------------
+timeline = defaultdict(list)
+
+for block in blocks:
+    lines = block.strip().splitlines()
+    if len(lines) < 3:
+        continue
+
+    timecode = lines[1].strip()
+    text = clean(" ".join(lines[2:]))
+
+    if len(text) < 2:
+        continue
+
+    timeline[timecode].append(text)
+
+# ---------------- FLOW BUILDER ----------------
+def merge_flow(texts):
+    """
+    Brain v6:
+    - merge fragments into natural speech
+    - avoid word repetition
+    """
+
+    words = []
+    seen = set()
+
+    for t in texts:
+        for w in t.split():
+
+            lw = w.lower()
+
+            if lw not in seen:
+                words.append(w)
+                seen.add(lw)
+
+    return " ".join(words)
+
+# ---------------- REBUILD OUTPUT ----------------
+cleaned = []
+idx = 1
+
+prev_sentence = ""
+
+for timecode, texts in timeline.items():
+
+    merged = merge_flow(texts)
+
+    # avoid near-duplicate sentences across timeline
+    if merged.lower() == prev_sentence.lower():
+        continue
+
+    prev_sentence = merged
+
+    # split long flow into readable chunks
+    words = merged.split()
+    chunk = []
+
+    for w in words:
+        chunk.append(w)
+
+        if len(chunk) >= 7 or w.endswith((".", "!", "?")):
+            cleaned.append(f"{idx}\n{timecode}\n{' '.join(chunk)}\n")
+            idx += 1
+            chunk = []
+
+    if chunk:
+        cleaned.append(f"{idx}\n{timecode}\n{' '.join(chunk)}\n")
+        idx += 1
+
+with open(output_file, "w", encoding="utf-8") as f:
+    f.write("\n".join(cleaned))
+
+print(f"✅ Flow subtitles created: {output_file}")
+print(f"Total segments: {idx-1}")
+
+========================================
+FILE: subtitle_brain_v7.py
+========================================
+import re
+import glob
+from collections import defaultdict
+
+input_file = "cleaned_subs_v6_flow.srt"
+output_file = "cleaned_subs_v7_viral.srt"
+
+files = glob.glob(input_file)
+
+if not files:
+    print("❌ Input file missing")
+    exit(1)
+
+with open(input_file, "r", encoding="utf-8", errors="ignore") as f:
+    content = f.read()
+
+blocks = re.split(r"\n\s*\n", content)
+
+# ---------------- CLEAN ----------------
+def clean(text):
+    return re.sub(r"\s+", " ", text).strip()
+
+# ---------------- VIRAL SCORING ----------------
+HOOK_WORDS = ["you", "love", "never", "cry", "alone", "hate", "miss", "gone"]
+
+def viral_score(text, position):
+    words = text.lower().split()
+
+    hook_score = sum(2 for w in words if w in HOOK_WORDS)
+
+    length_score = min(len(words) / 6, 2)
+
+    # early position boost (first seconds matter most)
+    position_boost = 2.0 if position < 3 else 1.0
+
+    return hook_score + length_score + position_boost
+
+# ---------------- GROUP BY TIMESTAMP ----------------
+timeline = defaultdict(list)
+
+for block in blocks:
+    lines = block.strip().splitlines()
+    if len(lines) < 3:
+        continue
+
+    timecode = lines[1].strip()
+    text = clean(" ".join(lines[2:]))
+
+    if len(text) < 2:
+        continue
+
+    timeline[timecode].append(text)
+
+# ---------------- DIRECTOR BRAIN ----------------
+cleaned = []
+idx = 1
+position = 0
+
+emotion_arc = []
+
+for timecode, texts in timeline.items():
+
+    merged = " ".join(texts)
+    words = merged.split()
+
+    chunk = []
+    for w in words:
+        chunk.append(w)
+
+        if len(chunk) >= 6 or w.endswith((".", "!", "?")):
+
+            sentence = " ".join(chunk)
+
+            score = viral_score(sentence, position)
+
+            # emotional tagging (simple heuristic)
+            emotion = "neutral"
+            low = sentence.lower()
+
+            if any(k in low for k in ["love", "miss", "heart"]):
+                emotion = "love"
+            elif any(k in low for k in ["cry", "gone", "alone"]):
+                emotion = "sad"
+            elif any(k in low for k in ["never", "hate"]):
+                emotion = "anger"
+
+            emotion_arc.append(emotion)
+
+            cleaned.append(
+                f"{idx}\n{timecode}\n{sentence} [{emotion}|{score:.1f}]\n"
+            )
+
+            idx += 1
+            position += 1
+            chunk = []
+
+    if chunk:
+        sentence = " ".join(chunk)
+        score = viral_score(sentence, position)
+
+        cleaned.append(
+            f"{idx}\n{timecode}\n{sentence} [{emotion}|{score:.1f}]\n"
+        )
+
+        idx += 1
+        position += 1
+
+# ---------------- OUTPUT ----------------
+with open(output_file, "w", encoding="utf-8") as f:
+    f.write("\n".join(cleaned))
+
+print(f"✅ Viral Director Brain v7 created: {output_file}")
+print(f"Segments: {idx-1}")
+print(f"Emotion arc: {emotion_arc[:10]}...")
+
+========================================
+FILE: validator.py
+========================================
+import json
+
+REQUIRED_FIELDS = {"text", "emotion", "intensity"}
+
+def load_json_safe(path):
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        print("❌ JSON load failed:", e)
+        return None
+
+
+def validate_captions(data):
+    if not data or "captions" not in data:
+        return False, "Missing captions key"
+
+    clean = []
+
+    for i, c in enumerate(data["captions"]):
+        if not isinstance(c, dict):
+            print(f"⚠️ Skipping invalid item {i}")
+            continue
+
+        if not REQUIRED_FIELDS.issubset(c.keys()):
+            print(f"⚠️ Fixing missing fields in item {i}")
+
+            c.setdefault("text", "default text")
+            c.setdefault("emotion", "neutral")
+            c.setdefault("intensity", 5)
+
+        if not isinstance(c["text"], str):
+            c["text"] = str(c["text"])
+
+        if not isinstance(c["emotion"], str):
+            c["emotion"] = "neutral"
+
+        try:
+            c["intensity"] = int(c["intensity"])
+        except:
+            c["intensity"] = 5
+
+        clean.append(c)
+
+    if not clean:
+        return False, "No valid captions"
+
+    return True, {"captions": clean}
+
+
+def validate_and_fix(path):
+    data = load_json_safe(path)
+
+    ok, result = validate_captions(data)
+
+    if not ok:
+        print("❌ Validation failed:", result)
+        return None
+
+    print("✅ Validation passed + auto-fixed")
+    return result
+
+========================================
+FILE: auth.js
+========================================
+const { google } = require('googleapis');
+const fs = require('fs');
+const path = require('path');
+const readline = require('readline');
+const os = require('os');
+
+const D = path.join(os.homedir(), 'ytbot');
+const SCOPES = ['https://www.googleapis.com/auth/youtube.upload'];
+
+const TP = path.join(D, 'token.json');
+const CP = path.join(D, 'credentials.json');
+
+function askQuestion(query) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise(resolve => {
+    rl.question(query, answer => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
+
+async function authenticate() {
+  // 1. Check credentials
+  if (!fs.existsSync(CP)) {
+    console.log('\nERROR: credentials.json not found!');
+    console.log('Fix steps:');
+    console.log('1. Go to https://console.cloud.google.com');
+    console.log('2. Create project: ytbot');
+    console.log('3. Enable YouTube Data API v3');
+    console.log('4. Create OAuth 2.0 Desktop credentials');
+    console.log('5. Download JSON → place in ~/ytbot/credentials.json');
+    process.exit(1);
+  }
+
+  // 2. Read credentials
+  const cr = JSON.parse(fs.readFileSync(CP));
+  const { client_secret, client_id, redirect_uris } = cr.installed;
+
+  const o = new google.auth.OAuth2(
+    client_id,
+    client_secret,
+    redirect_uris[0]
+  );
+
+  // 3. If token exists → reuse it
+  if (fs.existsSync(TP)) {
+    const t = JSON.parse(fs.readFileSync(TP));
+
+    if (t.expiry_date && Date.now() < t.expiry_date) {
+      o.setCredentials(t);
+      console.log('✅ Already logged in');
+      return o;
+    }
+  }
+
+  // 4. Need new login
+  const authUrl = o.generateAuthUrl({
+    access_type: 'offline',
+    scope: SCOPES
+  });
+
+  console.log('\n👉 Open this URL and login:\n');
+  console.log(authUrl);
+
+  const code = await askQuestion('\nPaste Google code here: ');
+
+  const { tokens } = await o.getToken(code.trim());
+
+  o.setCredentials(tokens);
+
+  fs.writeFileSync(TP, JSON.stringify(tokens));
+  console.log('\n✅ Login saved forever!');
+
+  return o;
+}
+
+module.exports = { authenticate };
+
+========================================
+FILE: make-reel.js
+========================================
+import { execFileSync } from "child_process";
+import fs from "fs";
+import path from "path";
+
+const base = process.cwd();
+const linesPath = path.join(base, "lines.json");
+if (!fs.existsSync(linesPath)) {
+  throw new Error("❌ lines.json is missing.");
+}
+const data = JSON.parse(fs.readFileSync(linesPath, "utf8"));
+
+const caption = String(data.caption ?? "").replace(/[\r\n]+/g, " ").trim();
+const captionFile = path.join(base, "caption.txt");
+fs.writeFileSync(captionFile, caption, "utf8");
+
+const chosenPath = path.join(base, "chosen.txt");
+const targetClips = fs.readFileSync(chosenPath, "utf8")
+  .split("\n")
+  .map(line => line.trim())
+  .filter(line => line.length > 0);
+
+let isConcatFlow = targetClips.length > 0;
+let concatListFile = path.join(base, "ffmpeg_concat_list.txt");
+
+if (isConcatFlow) {
+  let concatContent = "";
+  targetClips.forEach(clipPath => {
+    concatContent += `file '${clipPath.replace(/'/g, "'\\''")}'\n`;
+  });
+  fs.writeFileSync(concatListFile, concatContent, "utf8");
+}
+
+const musicDir = path.join(base, "music");
+const musicFiles = fs.readdirSync(musicDir).filter(f => f.toLowerCase().endsWith(".mp3"));
+if (musicFiles.length === 0) {
+  throw new Error("❌ No background music files found in music directory.");
+}
+const randomMusic = musicFiles[Math.floor(Math.random() * musicFiles.length)];
+const musicPath = path.join(musicDir, randomMusic);
+
+const finalVideoPath = path.join(base, "output", "final-video.mp4");
+
+let ffArgs = ["-y"];
+if (isConcatFlow) {
+  ffArgs.push("-f", "concat", "-safe", "0", "-i", concatListFile);
+} else {
+  ffArgs.push("-i", "source_video.mp4");
+}
+ffArgs.push("-i", musicPath);
+
+ffArgs.push("-filter_complex", [
+  "[0:v]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,boxblur=25[bg_blurred]",
+  "[0:v]scale=720:-1[fg_scaled]",
+  "[bg_blurred][fg_scaled]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2[base_video]",
+  "[base_video]drawbox=x=0:y=0:w=720:h=160:color=black@0.65:t=fill[video_with_banner]",
+  `[video_with_banner]drawtext=textfile=caption.txt:fontcolor=white:fontsize=28:fontfile=/system/fonts/Roboto-Bold.ttf:x=(w-text_w)/2:y=(160-text_h)/2[v]`,
+  "[1:a]volume=0.85,afade=t=in:d=1[a]"
+].join(";"));
+
+ffArgs.push(
+  "-map", "[v]",
+  "-map", "[a]",
+  "-t", "15",
+  "-r", "30",
+  "-c:v", "libx264",
+  "-preset", "faster",
+  "-crf", "20",
+  "-c:a", "aac",
+  "-b:a", "128k",
+  finalVideoPath
+);
+
+try {
+  console.log("🎬 Processing clean canvas rendering sequence via FFmpeg pipeline...");
+  execFileSync("ffmpeg", ffArgs, { stdio: "inherit" });
+  console.log(`🚀 MASTER VIDEO PRO-RENDER SUCCESSFUL -> ${finalVideoPath}`);
+} catch (err) {
+  console.error("❌ Process failure:", err.message);
+} finally {
+  if (fs.existsSync(concatListFile)) fs.unlinkSync(concatListFile);
+}
+
+========================================
+FILE: subtitle_brain_v8.js
+========================================
+import fs from "fs";
+import Groq from "groq-sdk";
+import glob from "glob";
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+});
+
+const inputFile = glob.sync("cleaned_subs_v7_viral.srt")[0];
+
+if (!inputFile) {
+  console.log("❌ Missing input file");
+  process.exit(1);
+}
+
+const content = fs.readFileSync(inputFile, "utf8");
+const blocks = content.split(/\n\s*\n/);
+
+let idx = 1;
+
+// ---------------- AI DIRECTOR ----------------
+async function analyzeScene(text, position) {
+  try {
+    const res = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "system",
+          content: `
+You are a viral video director AI.
+
+Analyze subtitle scene and return ONLY JSON:
+
+{
+  "emotion": "love|sad|anger|neutral",
+  "role": "hook|build|climax|end",
+  "viral_score": 1-10,
+  "intensity": 1-10
+}
+
+Rules:
+- Hook = first attention grabbing line
+- Climax = emotional peak
+- Build = story development
+- End = closure
+`
+        },
+        {
+          role: "user",
+          content: text
+        }
+      ],
+      temperature: 0.5
+    });
+
+    return JSON.parse(res.choices[0].message.content);
+
+  } catch (e) {
+    // fallback system (important)
+    return {
+      emotion: "neutral",
+      role: position < 2 ? "hook" : "build",
+      viral_score: 5,
+      intensity: 5
+    };
+  }
+}
+
+// ---------------- MAIN ----------------
+async function run() {
+  let output = [];
+  let position = 0;
+
+  for (const block of blocks) {
+    const lines = block.trim().split("\n");
+    if (lines.length < 3) continue;
+
+    const timecode = lines[1];
+    const text = lines.slice(2).join(" ").trim();
+
+    if (!text) continue;
+
+    const ai = await analyzeScene(text, position);
+
+    let boost = 1;
+
+    if (ai.role === "hook") boost = 2.0;
+    if (ai.role === "climax") boost = 1.8;
+
+    const finalScore = (ai.viral_score + ai.intensity) * boost;
+
+    output.push(
+      `${idx}\n${timecode}\n${text} [${ai.role}|${ai.emotion}|${finalScore.toFixed(1)}]\n`
+    );
+
+    idx++;
+    position++;
+  }
+
+  fs.writeFileSync("cleaned_subs_v8_director.srt", output.join("\n"));
+
+  console.log("✅ Brain v8 AI Director created");
+  console.log(`Segments: ${idx - 1}`);
+}
+
+run();
+
+========================================
+FILE: upload.js
+========================================
+require('dotenv').config();
+const{google}=require('googleapis');
+const{authenticate}=require('./auth');
+const fs=require('fs'),path=require('path');
+const TITLE=process.argv[2]||'Amazing Facts You Did Not Know';
+const TAGS=(process.argv[3]||'india,facts,trending').split(',');
+async function upload(){
+  const D=path.join(require('os').homedir(),'ytbot');
+  process.chdir(D);
+  if(!fs.existsSync('video.mp4')){console.log("ERROR: video.mp4 missing");process.exit(1);}
+  const mb=(fs.statSync('video.mp4').size/(1024*1024)).toFixed(1);
+  console.log(`Uploading ${mb}MB: ${TITLE}`);
+  const auth=await authenticate();
+  const yt=google.youtube({version:'v3',auth});
+  const script=fs.existsSync('script.txt')?fs.readFileSync('script.txt','utf8').replace(/HOOK:|FACT:|EXPLANATION:|INSIGHT:|CTA:/g,'').substring(0,400).trim():'';
+  const desc=`${script}\n\n━━━━━━━━━━━━━━━━━\n🔔 Subscribe for daily videos!\n👍 Like this video\n💬 Comment below\n━━━━━━━━━━━━━━━━━\n\n#Shorts #India #Facts #Trending`;
+  const res=await yt.videos.insert({
+    part:['snippet','status'],
+    requestBody:{
+      snippet:{title:TITLE+' #Shorts',description:desc,tags:[...TAGS,'shorts','india','viral','trending'],categoryId:'22',defaultLanguage:'en'},
+      status:{privacyStatus:'public',madeForKids:false}
+    },
+    media:{mimeType:'video/mp4',body:fs.createReadStream('video.mp4')}
+  });
+  const id=res.data.id;
+  console.log(`\n✅ LIVE: https://youtube.com/shorts/${id}`);
+  const h=fs.existsSync('upload-history.json')?JSON.parse(fs.readFileSync('upload-history.json')):[];
+  h.push({date:new Date().toISOString(),title:TITLE,url:`https://youtu.be/${id}`});
+  fs.writeFileSync('upload-history.json',JSON.stringify(h,null,2));
+  console.log(`Total uploaded: ${h.length} videos`);
+}
+upload().catch(e=>{console.error('Upload error:',e.message);process.exit(1);});
+
+========================================
+FILE: brain.mjs
+========================================
+import fs from "fs";
+import Groq from "groq-sdk";
+
+// -------------------- ENV LOADER --------------------
+try {
+  const env = fs.readFileSync(".env", "utf8");
+
+  env.split("\n").forEach(line => {
+    const [k, ...v] = line.split("=");
+    if (k && v.length) {
+      process.env[k.trim()] = v.join("=").trim();
+    }
+  });
+} catch (err) {
+  console.error("❌ .env file missing");
+  process.exit(1);
+}
+
+// -------------------- GROQ INIT --------------------
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+});
+
+// -------------------- INPUT --------------------
+const userPrompt = process.argv[2] || "sad anime love story";
+
+// -------------------- AI CALL --------------------
+async function run() {
+  try {
+    const res = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "system",
+          content: `
+You generate VIRAL anime reel structure.
+
+Return ONLY valid JSON.
+
+Format:
+{
+  "caption1": "",
+  "caption2": "",
+  "tags": []
+}
+
+Rules:
+- max 6 words per caption
+- emotional + viral
+- anime style
+- no extra text
+`
+        },
+        {
+          role: "user",
+          content: userPrompt
+        }
+      ],
+      temperature: 1
+    });
+
+    const raw = res.choices[0].message.content;
+
+    // -------------------- JSON SAFETY --------------------
+    let parsed;
+
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      console.error("❌ AI returned invalid JSON");
+      console.log(raw);
+      process.exit(1);
+    }
+
+    fs.writeFileSync("brain.json", JSON.stringify(parsed, null, 2));
+
+    console.log("✅ Brain generated:");
+    console.log(parsed);
+
+  } catch (err) {
+    console.error("❌ Groq API failed:", err.message);
+  }
+}
+
+run();
+
+========================================
+FILE: generate-text.mjs
+========================================
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Lock it to Gojo since your current media assets are Gojo-focused
+const character = "Gojo";
+
+const captions = [
+  `POV: You realized ${character} wasn't bluffing... 💀`,
+  `${character} genuinely has unlimited aura. 🥶`,
+  `The storyline belongs to ${character} now.`,
+  `Bro decided to be an absolute menace to society`
+];
+
+const selected = {
+  character,
+  query: `${character} vertical edit`,
+  caption: captions[Math.floor(Math.random() * captions.length)],
+  timestamp: new Date().toISOString()
+};
+
+const outputPath = path.join(__dirname, "lines.json");
+
+try {
+  fs.writeFileSync(outputPath, JSON.stringify(selected, null, 2), "utf-8");
+  console.log("🔥 METADATA LOCKED GENERATED SUCCESSFULLY:");
+  console.log(selected);
+} catch (error) {
+  console.error("❌ Failed to write lines.json:", error);
+}
+
+========================================
+FILE: RUN_ME.sh
+========================================
+#!/bin/bash
+
+echo "🎬 YTBOT PIPELINE - MASTER RUNNER"
+echo "================================="
+
+# Clean old outputs
+rm -rf output/*.mp4 2>/dev/null
+rm -rf /sdcard/Download/reel_ready.mp4 2>/dev/null
+
+# Run pipeline
+echo "📹 Running video compilation..."
+python3 main.py
+
+# Copy video to output folder
+if [ -f "/sdcard/Download/reel_ready.mp4" ]; then
+    cp /sdcard/Download/reel_ready.mp4 output/final-video.mp4
+    echo "✅ Video saved to: output/final-video.mp4"
+fi
+
+ls -lh output/
+
+========================================
+FILE: auto-cut.sh
+========================================
+#!/bin/bash
+
+cd ~/ytbot
+
+SRC=$(ls source_video.* 2>/dev/null | head -1)
+
+if [ -z "$SRC" ]; then
+  echo "ERROR: No source video found"
+  exit 1
+fi
+
+echo "Cutting: $SRC"
+
+DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$SRC")
+DURATION=${DURATION%.*}
+
+echo "Duration: ${DURATION}s"
+
+mkdir -p myclips
+rm -f myclips/*.mp4
+
+COUNT=0
+
+# Skip first 5 seconds, cut every 3 seconds
+for ((START=5; START<=DURATION-3; START+=3)); do
+
+  OUT="myclips/clip_$(printf '%03d' $COUNT).mp4"
+
+  ffmpeg -y -ss $START -i "$SRC" -t 3 \
+    -vf "scale=1080:1380:force_original_aspect_ratio=increase,crop=1080:1380" \
+    -c:v libx264 -preset ultrafast -crf 28 -an "$OUT"
+
+  COUNT=$((COUNT+1))
+
+  echo -ne "Clips: $COUNT\r"
+
+done
+
+echo ""
+echo "DONE → $COUNT clips created"
+
+========================================
+FILE: cut_clips.sh
+========================================
+#!/bin/bash
+cd ~/ytbot || exit 1
+mkdir -p myclips
+rm -f myclips/*.mp4
+
+# 1. Fixed the truncated ffprobe command to get total duration cleanly
+DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 anime_raw.mp4)
+
+# Round the duration down to an integer for the seq command
+DURATION_INT=${DURATION%.*}
+echo "Total Duration: ${DURATION_INT}s"
+
+COUNT=0
+
+# Loop in steps of 3 seconds
+for START in $(seq 0 3 "$DURATION_INT"); do
+  # Check if remaining time is too short to bother cutting
+  if [ "$START" -ge "$DURATION_INT" ]; then
+    break
+  fi
+
+  OUT="myclips/clip_$(printf '%03d' $COUNT).mp4"
+  
+  # 2. Fixed the truncated -vf string and added fps=30 for stability
+  # 3. Placed -ss before -i for lightning-fast seeking
+  ffmpeg -y -ss "$START" -i anime_raw.mp4 -t 3 \
+    -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30" \
+    -c:v libx264 -preset ultrafast -crf 28 -an "$OUT" 2>/dev/null
+    
+  echo "✅ Saved: $OUT (Start: ${START}s)"
+  COUNT=$((COUNT+1))
+done
+
+echo "🔥 Process Finished: Created $COUNT vertical clips!"
+
+
+========================================
+FILE: run.sh
+========================================
+#!/bin/bash
+
+cd ~/ytbot || { echo "❌ Working directory base root missing."; exit 1; }
+
+echo "===================================================="
+echo "🚀 INITIATING AUTOMATED YTBOT BROADCAST ENGINE v2026"
+echo "===================================================="
+
+# Force clean old temporary text layers to prevent caching bugs
+rm -f caption.txt ffmpeg_concat_list.txt subs.ass cleaned_subs.srt
+
+mkdir -p output clips myclips music
+
+if [ -f "generate-text.mjs" ]; then
+    echo "🔥 Generation Hook: Spinning context metadata..."
+    node generate-text.mjs
+fi
+
+if [ -f "selector.py" ]; then
+    echo "🎯 Scoring Top Clip Sequences..."
+    python3 selector.py
+fi
+
+# Native bash safety check: only run subtitle parsers if an SRT file exists
+if ls *.srt 1>/dev/null 2>&1; then
+    echo "🧹 SRT detected. Normalizing subtitle tracks..."
+    python3 clean_srt.py 2>/dev/null || true
+    python3 srt_to_ass.py 2>/dev/null || true
+else
+    echo "ℹ️ No raw SRT files found in directory. Clean visual export active."
+fi
+
+if [ -f "make-reel.js" ]; then
+    echo "🚀 Synthesizing audio/video layers..."
+    node make-reel.js
+else
+    echo "❌ Central script missing."
+    exit 1
+fi
+
+echo "===================================================="
+echo "🏆 SUCCESS: RENDER COMPLETED ZERO-ERROR"
+echo "===================================================="
+
+========================================
+FILE: setup.sh
+========================================
+#!/bin/bash
+echo "Installing dependencies..."
+pip install edge-tts groq requests --break-system-packages
+cd ~/ytbot
+npm install groq
+pkg install cronie -y
+echo "✅ Done! Now edit ~/ytbot/.env"
+
+========================================
+FILE: core/ai.js
+========================================
+import Groq from "groq-sdk";
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+});
+
+export async function aiSelectCaption(captions, mood = "sad") {
+
+  const res = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [
+      {
+        role: "system",
+        content: `
+You are a STRICT JSON generator.
+
+RULES:
+- Output ONLY valid JSON
+- No text before or after
+- No explanations
+- No markdown
+
+FORMAT:
+{
+  "index": 0,
+  "reason": "short reason"
+}
+`
+      },
+      {
+        role: "user",
+        content: `
+Pick best caption index for mood: ${mood}
+
+CAPTIONS:
+${JSON.stringify(captions, null, 2)}
+`
+      }
+    ],
+    temperature: 0.3
+  });
+
+  const text = res.choices[0].message.content.trim();
+
+  // SAFE PARSE (prevents crash)
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.log("⚠️ RAW MODEL OUTPUT:", text);
+
+    // fallback system
+    return {
+      index: 0,
+      reason: "fallback due to invalid JSON"
+    };
+  }
+}
+
+export function viralScore(caption) {
+  const base = caption.intensity || 5;
+
+  const boost = {
+    "heartbreak": 2,
+    "sad-love": 1.5,
+    "missing-you": 1.2
+  };
+
+  return base * (boost[caption.emotion] || 1);
+}
+
+========================================
+FILE: core/brain_v4.js
+========================================
+export class BrainV4 {
+  constructor({ memory, scorer, validator }) {
+    this.memory = memory;
+    this.scorer = scorer;
+    this.validator = validator;
+  }
+
+  async run(input) {
+    const safeInput = this.validator.clean(input);
+
+    const candidates = await this.memory.getCandidates(safeInput);
+
+    const scored = candidates.map(c => ({
+      ...c,
+      score: this.scorer.score(c, safeInput)
+    }));
+
+    scored.sort((a, b) => b.score - a.score);
+
+    const best = scored[0];
+
+    if (!best) {
+      return {
+        status: "fail",
+        reason: "no candidates"
+      };
+    }
+
+    await this.memory.store({
+      input: safeInput,
+      output: best,
+      timestamp: Date.now()
+    });
+
+    return {
+      caption: best.text,
+      emotion: best.emotion,
+      score: best.score,
+      memory_used: true
+    };
+  }
+}
+
+========================================
+FILE: core/brain_v5.js
+========================================
+export class BrainV5 {
+  constructor({ memory, scorer, validator }) {
+    this.memory = memory;
+    this.scorer = scorer;
+    this.validator = validator;
+  }
+
+  async run(input) {
+    const clean = this.validator.clean(input);
+
+    const candidates = await this.memory.getCandidates(clean);
+
+    const weights = this.memory.getEmotionWeights();
+
+    const scored = candidates.map(c => {
+      const baseScore = this.scorer.score(c, clean);
+
+      // 🔥 learning boost
+      const emotionWeight = weights[c.emotion] || 1;
+
+      return {
+        ...c,
+        score: baseScore * (1 + emotionWeight * 0.1)
+      };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    const best = scored[0];
+
+    this.memory.store({
+      input: clean,
+      output: best
+    });
+
+    return {
+      caption: best.text,
+      emotion: best.emotion,
+      score: best.score,
+      learning_applied: true
+    };
+  }
+}
+
+========================================
+FILE: core/brain_v6.js
+========================================
+export class BrainV6 {
+  constructor({ memory, scorer, validator }) {
+    this.memory = memory;
+    this.scorer = scorer;
+    this.validator = validator;
+  }
+
+  analyze(input) {
+    return {
+      mood: input.includes("love") ? "romance" : "sad",
+      intensity: input.length
+    };
+  }
+
+  async run(input) {
+    const clean = this.validator.clean(input);
+
+    const analysis = this.analyze(clean);
+
+    const candidates = await this.memory.getCandidates(clean);
+
+    const trend = this.memory.getEmotionTrend();
+
+    const scored = candidates.map(c => {
+      let score = this.scorer.score(c, clean);
+
+      // 🔥 director bias from history
+      const past = trend[c.emotion]?.score || 0;
+      const count = trend[c.emotion]?.count || 1;
+
+      const memoryBoost = past / count;
+
+      score += memoryBoost * 0.5;
+
+      return {
+        ...c,
+        score,
+        memoryBoost
+      };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    const best = scored[0];
+
+    const output = {
+      caption: best.text,
+      emotion: best.emotion,
+      score: best.score,
+      analysis,
+      memoryBoost: best.memoryBoost
+    };
+
+    this.memory.store({
+      input: clean,
+      output
+    });
+
+    return output;
+  }
+}
+
+========================================
+FILE: core/brain_v7.js
+========================================
+export class BrainV7 {
+  constructor({ memory, scorer, validator }) {
+    this.memory = memory;
+    this.scorer = scorer;
+    this.validator = validator;
+  }
+
+  detectHook(text) {
+    const hooks = ["you", "when", "why", "i", "she", "he", "we"];
+
+    const words = text.toLowerCase().split(" ");
+    const first = words.slice(0, 3).join(" ");
+
+    let hookScore = 0;
+
+    for (const h of hooks) {
+      if (first.includes(h)) hookScore += 1;
+    }
+
+    return hookScore;
+  }
+
+  simulateRetention(caption) {
+    const len = caption.text.length;
+
+    let retention = 10;
+
+    if (len < 30) retention += 5;
+    if (len > 60) retention -= 3;
+
+    if (caption.emotion === "heartbreak") retention += 4;
+    if (caption.emotion === "missing-you") retention += 3;
+
+    return retention;
+  }
+
+  async run(input) {
+    const clean = this.validator.clean(input);
+
+    const candidates = await this.memory.getCandidates(clean);
+
+    const stats = this.memory.getEmotionStats();
+
+    const scored = candidates.map(c => {
+      let base = this.scorer.score(c, clean);
+
+      const hook = this.detectHook(c.text);
+      const retention = this.simulateRetention(c);
+
+      const past = stats[c.emotion]?.score || 0;
+
+      const viralScore =
+        base +
+        hook * 2 +
+        retention +
+        past * 0.3;
+
+      return {
+        ...c,
+        hookScore: hook,
+        retentionScore: retention,
+        viralScore
+      };
+    });
+
+    scored.sort((a, b) => b.viralScore - a.viralScore);
+
+    const best = scored[0];
+
+    this.memory.store({
+      input: clean,
+      output: best
+    });
+
+    return {
+      caption: best.text,
+      emotion: best.emotion,
+      viralScore: best.viralScore,
+      hookScore: best.hookScore,
+      retentionScore: best.retentionScore,
+      reason: "viral director selection"
+    };
+  }
+}
+
+========================================
+FILE: core/director.js
+========================================
+import { aiSelectCaption, viralScore } from "./ai.js";
+import { logResult, getEmotionWeights } from "./memory.js";
+
+export async function runDirector(data, mood = "sad") {
+
+  const weights = getEmotionWeights();
+
+  const decision = await aiSelectCaption(data.captions, mood);
+
+  const selected = data.captions[decision.index];
+
+  let score = viralScore(selected);
+
+  // 🧠 MEMORY BOOST (LEARNING EFFECT)
+  const memoryBoost = weights[selected.emotion] || 1;
+
+  score = score * memoryBoost;
+
+  const output = {
+    caption: selected.text,
+    emotion: selected.emotion,
+    viral_score: score,
+    reason: decision.reason,
+    memory_boost: memoryBoost
+  };
+
+  logResult(output);
+
+  return output;
+}
+
+========================================
+FILE: core/learner.js
+========================================
+import fs from "fs";
+
+const PATH = "data/learning.json";
+
+// ----------------------
+// LOAD MEMORY
+// ----------------------
+export function loadMemory() {
+  return JSON.parse(fs.readFileSync(PATH, "utf8"));
+}
+
+// ----------------------
+// SAVE MEMORY
+// ----------------------
+export function saveMemory(data) {
+  fs.writeFileSync(PATH, JSON.stringify(data, null, 2));
+}
+
+// ----------------------
+// UPDATE WEIGHTS (REAL LEARNING)
+// ----------------------
+export function updateLearning(memory, result) {
+
+  const emotion = result.emotion;
+  const score = result.viral_score;
+
+  memory.history.push({
+    emotion,
+    score,
+    caption: result.caption,
+    time: Date.now()
+  });
+
+  // limit memory size
+  if (memory.history.length > 50) {
+    memory.history.shift();
+  }
+
+  // adjust weights (simple reinforcement learning)
+  if (!memory.emotion_weights[emotion]) {
+    memory.emotion_weights[emotion] = 1.0;
+  }
+
+  if (score > 8) {
+    memory.emotion_weights[emotion] += 0.1;
+  } else if (score < 5) {
+    memory.emotion_weights[emotion] -= 0.05;
+  }
+
+  // clamp values
+  memory.emotion_weights[emotion] =
+    Math.max(0.5, Math.min(3.0, memory.emotion_weights[emotion]));
+
+  saveMemory(memory);
+}
+
+========================================
+FILE: core/memory.js
+========================================
+import fs from "fs";
+
+const FILE = "core/memory.json";
+
+export function loadMemory() {
+  return JSON.parse(fs.readFileSync(FILE, "utf8"));
+}
+
+export function saveMemory(data) {
+  fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
+}
+
+export function logResult(entry) {
+  const mem = loadMemory();
+
+  mem.history.push({ ...entry, time: Date.now() });
+
+  if (mem.history.length > 100) {
+    mem.history = mem.history.slice(-100);
+  }
+
+  saveMemory(mem);
+}
+
+// 🧠 REAL LEARNING ENGINE
+export function getEmotionWeights() {
+  const mem = loadMemory();
+
+  const stats = {};
+
+  for (const h of mem.history) {
+    const e = h.emotion;
+    if (!stats[e]) stats[e] = { count: 0, score: 0 };
+
+    stats[e].count += 1;
+    stats[e].score += h.viral_score || 0;
+  }
+
+  const weights = {};
+
+  for (const [emotion, v] of Object.entries(stats)) {
+    const avg = v.score / v.count;
+
+    // normalize learning signal
+    weights[emotion] = avg * Math.log(v.count + 1);
+  }
+
+  return weights;
+}
+
+========================================
+FILE: core/memory_v2.js
+========================================
+export const memory = {
+  store: async (data) => {
+    console.log("MEMORY STORED:", data.caption || data.output?.text);
+  },
+
+  getCandidates: async () => {
+    return [
+      { text: "Some love stories end before they begin", emotion: "heartbreak", intensity: 9 },
+      { text: "I still feel you in empty silence", emotion: "missing-you", intensity: 7 },
+      { text: "Heart beats louder when you're gone", emotion: "sad-love", intensity: 8 }
+    ];
+  }
+};
+
+========================================
+FILE: core/memory_v3.js
+========================================
+let memory = [];
+
+export const memoryV3 = {
+  store(entry) {
+    memory.push({
+      ...entry,
+      timestamp: Date.now()
+    });
+  },
+
+  getAll() {
+    return memory;
+  },
+
+  getWeighted() {
+    // boost frequently successful emotions
+    const weights = {};
+
+    for (const m of memory) {
+      const e = m.output?.emotion;
+      const score = m.output?.score || 0;
+
+      weights[e] = (weights[e] || 0) + score;
+    }
+
+    return weights;
+  }
+};
+
+========================================
+FILE: core/memory_v5.js
+========================================
+const memory = [];
+
+export const memoryV5 = {
+  store(entry) {
+    memory.push({
+      ...entry,
+      timestamp: Date.now()
+    });
+  },
+
+  getAll() {
+    return memory;
+  },
+
+  getEmotionWeights() {
+    const weights = {};
+
+    for (const m of memory) {
+      const emotion = m.output?.emotion;
+      const score = m.output?.score || 0;
+
+      if (!emotion) continue;
+
+      weights[emotion] = (weights[emotion] || 0) + score;
+    }
+
+    return weights;
+  },
+
+  getBias(emotion) {
+    const weights = this.getEmotionWeights();
+    const total = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
+
+    return (weights[emotion] || 0) / total;
+  }
+};
+
+========================================
+FILE: core/memory_v6.js
+========================================
+const memory = [];
+
+const defaultCandidates = [
+  { text: "Some love stories end before they begin", emotion: "heartbreak", intensity: 9 },
+  { text: "I still feel you in empty silence", emotion: "missing-you", intensity: 7 },
+  { text: "Heart beats louder when you're gone", emotion: "sad-love", intensity: 8 },
+  { text: "We were never meant to last forever", emotion: "sad-love", intensity: 8 }
+];
+
+export const memoryV6 = {
+  store(entry) {
+    memory.push({
+      ...entry,
+      timestamp: Date.now()
+    });
+  },
+
+  getAll() {
+    return memory;
+  },
+
+  // ✅ FIX: this was missing
+  async getCandidates(input) {
+    // later we can make this dynamic learning
+    return defaultCandidates;
+  },
+
+  getEmotionTrend() {
+    const trend = {};
+
+    for (const m of memory) {
+      const e = m.output?.emotion;
+      const s = m.output?.score || 0;
+
+      if (!e) continue;
+
+      if (!trend[e]) trend[e] = { count: 0, score: 0 };
+
+      trend[e].count += 1;
+      trend[e].score += s;
+    }
+
+    return trend;
+  }
+};
+
+========================================
+FILE: core/memory_v7.js
+========================================
+const memory = [];
+
+const defaultCandidates = [
+  { text: "Some love stories end before they begin", emotion: "heartbreak", intensity: 9 },
+  { text: "I still feel you in empty silence", emotion: "missing-you", intensity: 7 },
+  { text: "Heart beats louder when you're gone", emotion: "sad-love", intensity: 8 },
+  { text: "We were never meant to last forever", emotion: "sad-love", intensity: 8 }
+];
+
+export const memoryV7 = {
+  store(entry) {
+    memory.push({
+      ...entry,
+      timestamp: Date.now()
+    });
+  },
+
+  getAll() {
+    return memory;
+  },
+
+  // ✅ REQUIRED FIX
+  async getCandidates(input) {
+    return defaultCandidates;
+  },
+
+  getEmotionStats() {
+    const stats = {};
+
+    for (const m of memory) {
+      const e = m.output?.emotion;
+      const score = m.output?.viralScore || 0;
+
+      if (!e) continue;
+
+      if (!stats[e]) stats[e] = { count: 0, score: 0 };
+
+      stats[e].count += 1;
+      stats[e].score += score;
+    }
+
+    return stats;
+  }
+};
+
+========================================
+FILE: core/pipeline.js
+========================================
+import { execSync } from "child_process";
+
+// ----------------------
+// AUTO VIDEO ENGINE
+// ----------------------
+export function runPipeline() {
+  console.log("🎬 Running autonomous pipeline...");
+
+  try {
+    execSync("bash run.sh", { stdio: "inherit" });
+  } catch (err) {
+    console.error("❌ Pipeline failed:", err.message);
+  }
+}
+
+========================================
+FILE: core/run.js
+========================================
+import dotenv from "dotenv";
+import BrainV7 from "./brain_v7.js";
+import { createMemory } from "./memory.js";
+
+dotenv.config();
+
+const withApp = async (input) => {
+  const memory = createMemory();
+  const brain = new BrainV7({ memory });
+
+  return await brain.run(input);
+};
+
+const run = async () => {
+  const input = process.argv.slice(2).join(" ") || "sad romance";
+
+  console.log("ENV CHECK:", !!process.env.GROQ_API_KEY);
+  console.log("\n🚀 INPUT:", input);
+
+  try {
+    const output = await withApp(input);
+
+    console.log("\n🎬 VIRAL DIRECTOR OUTPUT:");
+    console.log(JSON.stringify(output, null, 2));
+  } catch (err) {
+    console.error("\n❌ ERROR:", err.message);
+  }
+};
+
+run();
+
+========================================
+FILE: core/scorer.js
+========================================
+export const scorer = {
+  score(caption, input) {
+    let base = caption.intensity || 5;
+
+    const boost = {
+      "heartbreak": 2.2,
+      "sad-love": 1.6,
+      "missing-you": 1.3
+    };
+
+    return base * (boost[caption.emotion] || 1);
+  }
+};
+
+========================================
+FILE: core/validator.js
+========================================
+export const validator = {
+  clean(input) {
+    if (!input) return "sad";
+    return String(input)
+      .toLowerCase()
+      .replace(/[^a-z ]/g, "")
+      .trim();
+  }
+};

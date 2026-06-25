@@ -1,0 +1,68 @@
+2026-06-24 17:34:23,424 [INFO] STEP: Pre-flight checks
+2026-06-24 17:34:23,427 [INFO] validator: 37/37 captions valid across 6 moods
+2026-06-24 17:34:23,430 [INFO] captions.json: 37 captions across 6 moods
+2026-06-24 17:34:24,433 [INFO] ffmpeg: ready
+2026-06-24 17:34:27,676 [INFO] yt-dlp: ready
+2026-06-24 17:34:27,681 [WARNING] 🧠 AI soul: offline mode (set ANTHROPIC_API_KEY to enable)
+2026-06-24 17:34:27,681 [INFO]   export ANTHROPIC_API_KEY='sk-ant-...'
+2026-06-24 17:34:27,691 [INFO] 📼 Memory: 2 videos in editor history
+2026-06-24 17:34:27,691 [INFO] Pre-flight complete
+
+2026-06-24 17:34:27,733 [INFO] STEP: 🔥 ytbot v2 — Billion pipeline starting
+2026-06-24 17:34:28,004 [INFO] STEP: [fetch_video]
+2026-06-24 17:34:28,004 [INFO] STEP: Fetching video: 'anime sad edit'
+2026-06-24 17:34:28,021 [INFO]   Trying: 'anime sad edit' [bestvideo[height<=1080][ext=mp…]
+2026-06-24 17:36:04,503 [INFO]   Downloaded: 33.1MB, 257s
+2026-06-24 17:36:04,509 [INFO] fetch_video.py — DONE
+2026-06-24 17:36:04,510 [INFO] fetch_video — 96.5s
+2026-06-24 17:36:04,531 [INFO] STEP: [find_scenes]
+2026-06-24 17:36:04,778 [INFO] STEP: Scene detection — video: 257s
+2026-06-24 17:36:04,778 [INFO]   Detecting scenes (threshold=0.35)…
+2026-06-24 17:37:54,392 [INFO]   Raw cuts: 0
+2026-06-24 17:37:54,407 [WARNING]   No scenes found — using uniform 4s splits
+2026-06-24 17:37:54,412 [INFO]   Final clips: 15
+2026-06-24 17:37:57,421 [INFO]     0.00s → score 30.0
+2026-06-24 17:38:01,063 [INFO]     4.00s → score 30.0
+2026-06-24 17:38:03,746 [INFO]     8.00s → score 30.0
+2026-06-24 17:38:08,551 [INFO]     12.00s → score 30.0
+2026-06-24 17:38:11,605 [INFO]     16.00s → score 30.0
+2026-06-24 17:38:15,064 [INFO]     20.00s → score 30.0
+2026-06-24 17:38:17,448 [INFO]     24.00s → score 30.0
+2026-06-24 17:38:19,444 [INFO]     28.00s → score 30.0
+2026-06-24 17:38:22,399 [INFO]     32.00s → score 30.0
+2026-06-24 17:38:25,162 [INFO]     36.00s → score 30.0
+2026-06-24 17:38:27,851 [INFO]     40.00s → score 30.0
+2026-06-24 17:38:29,966 [INFO]     44.00s → score 30.0
+2026-06-24 17:38:32,250 [INFO]     48.00s → score 30.0
+2026-06-24 17:38:34,973 [INFO]     52.00s → score 30.0
+2026-06-24 17:38:37,217 [INFO]     56.00s → score 30.0
+2026-06-24 17:38:37,237 [INFO] Saved scenes.json (15 scenes)
+2026-06-24 17:38:37,237 [INFO] find_scenes.py — DONE
+2026-06-24 17:38:37,238 [INFO] find_scenes — 152.7s
+2026-06-24 17:38:37,355 [INFO] STEP: [cut_clips]
+2026-06-24 17:38:37,394 [INFO] STEP: Cutting 15 clips…
+2026-06-24 17:38:37,397 [INFO]   Cutting clip_00.mp4 @ 0.00s  dur=4.00s
+2026-06-24 17:39:02,065 [INFO]   Cutting clip_01.mp4 @ 4.00s  dur=4.00s
+2026-06-24 17:39:24,974 [INFO]   Cutting clip_02.mp4 @ 8.00s  dur=4.00s
+2026-06-24 17:39:51,706 [INFO]   Cutting clip_03.mp4 @ 12.00s  dur=4.00s
+2026-06-24 17:41:53,529 [WARNING] Timeout cutting clip at 12.00s
+2026-06-24 17:41:53,574 [WARNING]   Skipped clip_03.mp4 (cut failed)
+2026-06-24 17:41:53,579 [INFO]   Cutting clip_04.mp4 @ 16.00s  dur=4.00s
+2026-06-24 17:43:37,229 [INFO]   Cutting clip_05.mp4 @ 20.00s  dur=4.00s
+2026-06-24 17:44:25,542 [INFO]   Cutting clip_06.mp4 @ 24.00s  dur=4.00s
+2026-06-24 17:45:10,259 [INFO]   Cutting clip_07.mp4 @ 28.00s  dur=4.00s
+2026-06-24 17:45:49,791 [INFO]   Cutting clip_08.mp4 @ 32.00s  dur=4.00s
+2026-06-24 17:46:33,050 [INFO]   Cutting clip_09.mp4 @ 36.00s  dur=4.00s
+2026-06-24 17:47:14,937 [INFO]   Cutting clip_10.mp4 @ 40.00s  dur=4.00s
+2026-06-24 17:48:03,838 [INFO]   Cutting clip_11.mp4 @ 44.00s  dur=4.00s
+2026-06-24 17:49:20,897 [INFO]   Cutting clip_12.mp4 @ 48.00s  dur=4.00s
+2026-06-24 17:50:25,139 [INFO]   Cutting clip_13.mp4 @ 52.00s  dur=4.00s
+2026-06-24 17:51:36,325 [INFO]   Cutting clip_14.mp4 @ 56.00s  dur=200.67s
+2026-06-24 17:53:38,457 [WARNING] Timeout cutting clip at 56.00s
+2026-06-24 17:53:38,466 [WARNING]   Skipped clip_14.mp4 (cut failed)
+2026-06-24 17:53:38,466 [INFO] Cut 13/15 clips → /data/data/com.termux/files/home/ytbot/clips
+2026-06-24 17:53:38,467 [INFO] cut_clips.py — DONE
+2026-06-24 17:53:38,468 [INFO] cut_clips — 901.1s
+2026-06-24 17:53:38,533 [INFO] STEP: [select_clips]
+2026-06-24 17:53:38,546 [INFO] STEP: Scoring 15 clips for quality…
+2026-06-24 17:54:00,214 [ERROR] select_clips error: Command '['ffmpeg', '-y', '-i', '/data/data/com.termux/files/home/ytbot/_tmp_thumbs/clip_00_thumb.jpg', '-vf', 'signalstats', '-f', 'null', '-']' timed out after 15 seconds

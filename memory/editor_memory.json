@@ -1,0 +1,62 @@
+{
+  "runs": [
+    {
+      "timestamp": "2026-06-24T13:49:04.564615",
+      "query": "anime sad edit",
+      "mood": "sad",
+      "caption": "they left and took the warmth with them 🥀",
+      "viral_score": 19.0,
+      "ai_thoughts": ""
+    },
+    {
+      "timestamp": "2026-06-24T14:40:19.932970",
+      "query": "anime sad edit",
+      "mood": "sad",
+      "caption": "missing someone who doesn't miss you back hurts different 💔",
+      "viral_score": 10.56,
+      "ai_thoughts": "self-evaluated 23 candidates, score 10.0/10"
+    }
+  ],
+  "mood_wins": {
+    "sad": {
+      "count": 2,
+      "avg_score": 14.78
+    }
+  },
+  "caption_history": [
+    "they left and took the warmth with them 🥀",
+    "missing someone who doesn't miss you back hurts different 💔"
+  ],
+  "taste_notes": [],
+  "total_videos": 2,
+  "billion_evaluations": [
+    {
+      "timestamp": "2026-06-24T14:40:19.931091",
+      "chosen": "missing someone who doesn't miss you back hurts different 💔",
+      "rejected_count": 7,
+      "mistakes": [
+        {
+          "caption": "the version of me that loved you doesn't exist anymore",
+          "issues": [
+            "weak hook — starts with 'the', try starting with action/emotion word"
+          ],
+          "score": 9.5
+        },
+        {
+          "caption": "the version of me that loved you doesn't exist anymore",
+          "issues": [
+            "weak hook — starts with 'the', try starting with action/emotion word"
+          ],
+          "score": 9.5
+        },
+        {
+          "caption": "the hardest part isn't losing you. it's remembering.",
+          "issues": [
+            "weak hook — starts with 'the', try starting with action/emotion word"
+          ],
+          "score": 9.5
+        }
+      ]
+    }
+  ]
+}

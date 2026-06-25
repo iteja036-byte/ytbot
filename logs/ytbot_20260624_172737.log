@@ -1,0 +1,10 @@
+2026-06-24 17:27:37,618 [INFO] STEP: Pre-flight checks
+2026-06-24 17:27:37,620 [INFO] validator: 37/37 captions valid across 6 moods
+2026-06-24 17:27:37,623 [INFO] captions.json: 37 captions across 6 moods
+2026-06-24 17:27:38,420 [INFO] ffmpeg: ready
+2026-06-24 17:27:41,326 [INFO] yt-dlp: ready
+2026-06-24 17:27:41,328 [WARNING] 🧠 AI soul: offline mode (set ANTHROPIC_API_KEY to enable)
+2026-06-24 17:27:41,328 [INFO]   export ANTHROPIC_API_KEY='sk-ant-...'
+2026-06-24 17:27:41,337 [INFO] 📼 Memory: 2 videos in editor history
+2026-06-24 17:27:41,338 [INFO] Pre-flight complete
+
